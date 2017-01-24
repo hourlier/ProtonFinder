@@ -6,7 +6,7 @@ namespace larlitecv {
         pdgCode = 2212;
     }
 
-    void ProtonFinder::RunME(larlitecv::DataCoordinator dataco){
+    void ProtonFinder::RunME(larlitecv::DataCoordinator &dataco){
         std::cout << pdgCode << std::endl;
     }
 
