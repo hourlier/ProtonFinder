@@ -28,7 +28,9 @@
 
 // ROOT includes
 #include "TH2D.h"
+#include "TH1D.h"
 #include "TCanvas.h"
+#include "TBox.h"
 
 
 int main( int nargs, char** argv ) {
@@ -63,9 +65,12 @@ int main( int nargs, char** argv ) {
     // define useful variables
     std::string eventID = "";
     int Xmin, Xmax, Ymin,Ymax;
-    TH2D *hROI[3];
+    int Nrow, Ncol;
+    TH2D *hImage[3];
+    TH1D *hADC = new TH1D("hADC","hADC",1000,0,1000);
+    TBox *ROIBox;
     char planeName[4] = "UVY";
-    TCanvas *cROI = new TCanvas("cROI","cROI",900,300);
+    TCanvas *cROI = new TCanvas("cROI","cROI",1500,300);
     cROI->Divide(3,1);
 
     // loop over the events
@@ -76,45 +81,56 @@ int main( int nargs, char** argv ) {
         // access 2D images
         larcv::EventImage2D* event_imgs    = (larcv::EventImage2D*)dataco.get_larcv_data( larcv::kProductImage2D, larcv_image_producer );
         const std::vector<larcv::Image2D>& img_v = event_imgs->Image2DArray();
-
-
-        // access ROIs
         larcv::EventROI* event_rois = (larcv::EventROI*)dataco.get_larcv_data( larcv::kProductROI, larcv_roi_producer );
-        eventID=Form("%04d_%03d_%04d",dataco.run(),dataco.subrun(),dataco.event());
-        std::cout << eventID << std::endl;
         const std::vector<larcv::ROI>& roi_v = event_rois->ROIArray();
 
-        for(size_t iROI = 0;iROI < roi_v.size();iROI++){//loop over possible multiple ROIs
-            for(int iPlane = 0;iPlane < 3;iPlane++){// loop over 3 planes
+        eventID=Form("%04d_%03d_%05d",dataco.run(),dataco.subrun(),dataco.event());
 
-                Xmin = roi_v.at(iROI).BB(iPlane).min_x();
-                Xmax = roi_v.at(iROI).BB(iPlane).max_x();
-                Ymin = roi_v.at(iROI).BB(iPlane).min_y();
-                Ymax = roi_v.at(iROI).BB(iPlane).max_y();
+        for(int iPlane = 0;iPlane < 3;iPlane++){
+            Nrow = img_v.at(iPlane).meta().rows();
+            Ncol = img_v.at(iPlane).meta().cols();
 
-                std::cout << "plane " << planeName[iPlane] << " : Xmin = " << Xmin << ",\t Xmax = " << Xmax <<  std::endl;
-                std::cout <<                           "        : Ymin = " << Ymin << ",\t Ymax = " << Ymax <<  std::endl;
-                std::cout << std::endl;
+            hImage[iPlane] = new TH2D(Form("hImage_%c_%s",planeName[iPlane],eventID.c_str()),Form("hImage_%c_%s",planeName[iPlane],eventID.c_str()),Ncol,0,Ncol,Nrow,0,Nrow);
+            for(int iRow = 0;iRow<Nrow;iRow++){
+                for(int iCol = 0;iCol<Ncol;iCol++){
+                    hADC->Fill(img_v.at(iPlane).pixel(iRow,iCol));
+                    if(img_v.at(iPlane).pixel(iRow,iCol) > 100){
+                        hImage[iPlane]->SetBinContent(iCol,Nrow-iRow,img_v.at(iPlane).pixel(iRow,iCol));
+                    }
+                }
+            }
+            cROI->cd(iPlane+1);
 
-                hROI[iPlane] = new TH2D(Form("hROI_%c_%s",planeName[iPlane],eventID.c_str()),Form("hROI_%c_%s",planeName[iPlane],eventID.c_str()),(Xmax-Xmin),Xmin,Xmax,(Ymax-Ymin),Ymin,Ymax);
+            for(size_t iROI = 0;iROI < roi_v.size();iROI++){//loop over possible multiple ROIs
 
-                for(int iX = Xmin;iX<=Xmax;iX++){// loop over wires
-                    for(int iY = Ymin;iY <=Ymax;iY++){//loop over times
-                        hROI[iPlane]->SetBinContent((iX-Xmin)+1,(iY-Ymin)+1,img_v.at(iPlane).pixel(img_v.at(iPlane).meta().col(iX),img_v.at(iPlane).meta().row(iY)));
-                        //hROI[iPlane]->SetBinContent((iX-Xmin)+1,(iY-Ymin)+1,img_v.at(iPlane).pixel(iX/4,iY/8));
-                    }// loop over times
-                }// loop over wires
+                Xmin = img_v.at(iPlane).meta().col( roi_v.at(iROI).BB(iPlane).min_x());
+                Xmax = img_v.at(iPlane).meta().col( roi_v.at(iROI).BB(iPlane).max_x());
+                Ymin = Nrow-img_v.at(iPlane).meta().row( roi_v.at(iROI).BB(iPlane).min_y() );
+                Ymax = Nrow-img_v.at(iPlane).meta().row( roi_v.at(iROI).BB(iPlane).max_y() );
 
-                cROI->cd(iPlane+1);
-                hROI[iPlane]->Draw("colz");
-            }// loop over 3 planes
-            cROI->Modified();
-            cROI->Update();
-            cROI->SaveAs(Form("ROI_%zu_%s.png",iROI,eventID.c_str()));
-        }// loop over ROIs
+                ROIBox = new TBox(Xmin,Ymin,Xmax,Ymax);
+
+                ROIBox->SetFillStyle(0);
+                ROIBox->SetLineWidth(1);
+                ROIBox->SetLineColor(iPlane+2);
+                hImage[iPlane]->GetXaxis()->SetRangeUser(Xmin-4,Xmax+4);
+                hImage[iPlane]->GetYaxis()->SetRangeUser(Ymin-4,Ymax+4);
+                hImage[iPlane]->Draw("colz");
+                ROIBox->Draw();
+            }
+
+        }
+        cROI->Modified();
+        cROI->Update();
+        cROI->SaveAs(Form("ROI_%s.png",eventID.c_str()));
+
     }
 
     // finalize
+    TCanvas *cADC = new TCanvas();
+    cADC->SetLogy();
+    hADC->Draw();
+    cADC->SaveAs("cADC.png");
     dataco.finalize();
 
     return 0;
