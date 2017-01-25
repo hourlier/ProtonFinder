@@ -4,7 +4,7 @@
 // date of creation..........: 01/24/2017
 // date of last modification.: 01/25/2017
 //
-// This code tries to access the protons ROIs from the LArLite and LarCV files in input
+// This code accesses the protons ROIs from the LArLite and LarCV files in input
 // The goal is to isolate the pixels that correspond to the proton tracks and set everything else to 0
 //
 
@@ -30,7 +30,6 @@
 #include "TH2D.h"
 #include "TCanvas.h"
 
-//#include "ProtonFinder.h"
 
 int main( int nargs, char** argv ) {
     std::cout << "[Proton Finder]" << std::endl;
@@ -61,9 +60,6 @@ int main( int nargs, char** argv ) {
     if(nargs >= 3)firstEntry = atoi(argv[2]); // if not starting from 0
     if(nargs > 3){std::cout << "ERROR, syntax is ./run_ProtonFinder <nEntries> <firstEntry>" << std::endl; return 1;}
 
-    //larlitecv::ProtonFinder pf;
-    //pf.InitializeME();
-
     // define useful variables
     std::string eventID = "";
     int Xmin, Xmax, Ymin,Ymax;
@@ -84,7 +80,7 @@ int main( int nargs, char** argv ) {
 
         // access ROIs
         larcv::EventROI* event_rois = (larcv::EventROI*)dataco.get_larcv_data( larcv::kProductROI, larcv_roi_producer );
-        eventID=Form("%d_%d_%d",dataco.run(),dataco.subrun(),dataco.event());
+        eventID=Form("%04d_%03d_%04d",dataco.run(),dataco.subrun(),dataco.event());
         std::cout << eventID << std::endl;
         const std::vector<larcv::ROI>& roi_v = event_rois->ROIArray();
 
@@ -96,14 +92,16 @@ int main( int nargs, char** argv ) {
                 Ymin = roi_v.at(iROI).BB(iPlane).min_y();
                 Ymax = roi_v.at(iROI).BB(iPlane).max_y();
 
-                std::cout << "plane " << planeName[iPlane] << " : Xmin = " << Xmin << "\t Xmax = " << Xmax <<  std::endl;
-                std::cout << "          Ymin = " << Ymin << "\t Ymax = " << Ymax <<  std::endl;
+                std::cout << "plane " << planeName[iPlane] << " : Xmin = " << Xmin << ",\t Xmax = " << Xmax <<  std::endl;
+                std::cout <<                           "        : Ymin = " << Ymin << ",\t Ymax = " << Ymax <<  std::endl;
+                std::cout << std::endl;
 
                 hROI[iPlane] = new TH2D(Form("hROI_%c_%s",planeName[iPlane],eventID.c_str()),Form("hROI_%c_%s",planeName[iPlane],eventID.c_str()),(Xmax-Xmin),Xmin,Xmax,(Ymax-Ymin),Ymin,Ymax);
 
                 for(int iX = Xmin;iX<=Xmax;iX++){// loop over wires
                     for(int iY = Ymin;iY <=Ymax;iY++){//loop over times
-                        hROI[iPlane]->SetBinContent((iX-Xmin)+1,(iY-Ymin)+1,img_v.at(iPlane).pixel(iX/img_v.at(iPlane).meta().pixel_width(),iY/img_v.at(iPlane).meta().pixel_height()));
+                        hROI[iPlane]->SetBinContent((iX-Xmin)+1,(iY-Ymin)+1,img_v.at(iPlane).pixel(img_v.at(iPlane).meta().col(iX),img_v.at(iPlane).meta().row(iY)));
+                        //hROI[iPlane]->SetBinContent((iX-Xmin)+1,(iY-Ymin)+1,img_v.at(iPlane).pixel(iX/4,iY/8));
                     }// loop over times
                 }// loop over wires
 
@@ -112,14 +110,11 @@ int main( int nargs, char** argv ) {
             }// loop over 3 planes
             cROI->Modified();
             cROI->Update();
-            cROI->SaveAs(Form("ROI_%s.png",eventID.c_str()));
+            cROI->SaveAs(Form("ROI_%zu_%s.png",iROI,eventID.c_str()));
         }// loop over ROIs
-
-        //pf.RunME(dataco,ientry);
     }
 
     // finalize
-    //pf.FinalizeME();
     dataco.finalize();
 
     return 0;
