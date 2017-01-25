@@ -1,6 +1,16 @@
+//
+// Author: Adrien Hourlier
+//
+// date of creation..........: 01/24/2017
+// date of last modification.: 01/25/2017
+//
+// This code tries to access the protons ROIs from the LArLite and LarCV files in input
+// The goal is to isolate the pixels that correspond to the proton tracks and set everything else to 0
+//
 
 #include <iostream>
 #include <string>
+#include <vector>
 
 // config/storage: from LArCV
 #include "Base/PSet.h"
@@ -16,7 +26,11 @@
 #include "DataFormat/EventROI.h"
 #include "DataFormat/EventPixel2D.h"
 
-#include "ProtonFinder.h"
+// ROOT includes
+#include "TH2D.h"
+#include "TCanvas.h"
+
+//#include "ProtonFinder.h"
 
 int main( int nargs, char** argv ) {
     std::cout << "[Proton Finder]" << std::endl;
@@ -25,7 +39,7 @@ int main( int nargs, char** argv ) {
     larcv::PSet cfg = larcv::CreatePSetFromFile("config.cfg");
     larcv::PSet PFconfig = cfg.get<larcv::PSet>("ProtonFinderConfigurationFile");
     std::string larcv_image_producer = PFconfig.get<std::string>("InputLArCVImages");
-    std::string larcv_roi_producer = PFconfig.get<std::string>("InputLArCVROI");
+    std::string larcv_roi_producer   = PFconfig.get<std::string>("InputLArCVROI");
 
     // configure Data coordinator
     larlitecv::DataCoordinator dataco;
@@ -43,28 +57,63 @@ int main( int nargs, char** argv ) {
 
     int nEntries = dataco.get_nentries("larcv");
     int firstEntry = 0;
-    if(nargs >= 2)nEntries = atoi(argv[1]);   // if need to shorten
+    if(nargs >= 2)nEntries = atoi(argv[1]);   // if need to shorten run time
     if(nargs >= 3)firstEntry = atoi(argv[2]); // if not starting from 0
-    if(nargs > 3){std::cout << "ERROR, syntax is .run_ProtonFinder <nEntries> <firstEntry>" << std::endl; return 1;}
+    if(nargs > 3){std::cout << "ERROR, syntax is ./run_ProtonFinder <nEntries> <firstEntry>" << std::endl; return 1;}
 
     //larlitecv::ProtonFinder pf;
     //pf.InitializeME();
+
+    // define useful variables
+    std::string eventID = "";
+    int Xmin, Xmax, Ymin,Ymax;
+    TH2D *hROI[3];
+    char planeName[4] = "UVY";
+    TCanvas *cROI = new TCanvas("cROI","cROI",900,300);
+    cROI->Divide(3,1);
 
     // loop over the events
     for(int ientry = firstEntry;ientry<firstEntry+nEntries;ientry++){
         std::cout << ientry << "/" << nEntries << std::endl;
         dataco.goto_entry(ientry,"larcv");
+
+        // access 2D images
         larcv::EventImage2D* event_imgs    = (larcv::EventImage2D*)dataco.get_larcv_data( larcv::kProductImage2D, larcv_image_producer );
-        std::cout << dataco.run() << "\t" << dataco.subrun() << "\t" << dataco.event() << std::endl;
-        std::cout << "get data: number of images=" << event_imgs->Image2DArray().size() << std::endl;
         const std::vector<larcv::Image2D>& img_v = event_imgs->Image2DArray();
-        std::cout << "size of first image: "<< " rows=" << img_v.at(0).meta().rows() << " cols=" << img_v.at(0).meta().cols() << std::endl;
 
-        //trying to access ROIs
+
+        // access ROIs
         larcv::EventROI* event_rois = (larcv::EventROI*)dataco.get_larcv_data( larcv::kProductROI, larcv_roi_producer );
-        std::cout << "get data: number of ROIs=" << event_rois->ROIArray().size() << std::endl;
+        eventID=Form("%d_%d_%d",dataco.run(),dataco.subrun(),dataco.event());
+        std::cout << eventID << std::endl;
+        const std::vector<larcv::ROI>& roi_v = event_rois->ROIArray();
 
+        for(size_t iROI = 0;iROI < roi_v.size();iROI++){//loop over possible multiple ROIs
+            for(int iPlane = 0;iPlane < 3;iPlane++){// loop over 3 planes
 
+                Xmin = roi_v.at(iROI).BB(iPlane).min_x();
+                Xmax = roi_v.at(iROI).BB(iPlane).max_x();
+                Ymin = roi_v.at(iROI).BB(iPlane).min_y();
+                Ymax = roi_v.at(iROI).BB(iPlane).max_y();
+
+                std::cout << "plane " << planeName[iPlane] << " : Xmin = " << Xmin << "\t Xmax = " << Xmax <<  std::endl;
+                std::cout << "          Ymin = " << Ymin << "\t Ymax = " << Ymax <<  std::endl;
+
+                hROI[iPlane] = new TH2D(Form("hROI_%c_%s",planeName[iPlane],eventID.c_str()),Form("hROI_%c_%s",planeName[iPlane],eventID.c_str()),(Xmax-Xmin),Xmin,Xmax,(Ymax-Ymin),Ymin,Ymax);
+
+                for(int iX = Xmin;iX<=Xmax;iX++){// loop over wires
+                    for(int iY = Ymin;iY <=Ymax;iY++){//loop over times
+                        hROI[iPlane]->SetBinContent((iX-Xmin)+1,(iY-Ymin)+1,img_v.at(iPlane).pixel(iX/img_v.at(iPlane).meta().pixel_width(),iY/img_v.at(iPlane).meta().pixel_height()));
+                    }// loop over times
+                }// loop over wires
+
+                cROI->cd(iPlane+1);
+                hROI[iPlane]->Draw("colz");
+            }// loop over 3 planes
+            cROI->Modified();
+            cROI->Update();
+            cROI->SaveAs(Form("ROI_%s.png",eventID.c_str()));
+        }// loop over ROIs
 
         //pf.RunME(dataco,ientry);
     }
