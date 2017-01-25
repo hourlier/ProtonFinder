@@ -25,7 +25,7 @@ namespace larlitecv {
         ProtonFinder() {};
         virtual ~ProtonFinder() {};
         void InitializeME();
-        void RunME(larlitecv::DataCoordinator &dataco);
+        void RunME(larlitecv::DataCoordinator &dataco, int ientry);
         void FinalizeME();
     protected:
         int pdgCode;
