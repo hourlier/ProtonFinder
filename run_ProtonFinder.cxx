@@ -72,6 +72,7 @@ int main( int nargs, char** argv ) {
     char planeName[4] = "UVY";
     TCanvas *cROI = new TCanvas("cROI","cROI",1500,300);
     cROI->Divide(3,1);
+    int DisplayLevel = 2;
 
     // loop over the events
     for(int ientry = firstEntry;ientry<firstEntry+nEntries;ientry++){
@@ -94,9 +95,9 @@ int main( int nargs, char** argv ) {
             for(int iRow = 0;iRow<Nrow;iRow++){
                 for(int iCol = 0;iCol<Ncol;iCol++){
                     hADC->Fill(img_v.at(iPlane).pixel(iRow,iCol));
-                    if(img_v.at(iPlane).pixel(iRow,iCol) > 100){
-                        hImage[iPlane]->SetBinContent(iCol,Nrow-iRow,img_v.at(iPlane).pixel(iRow,iCol));
-                    }
+                    if(img_v.at(iPlane).pixel(iRow,iCol) < 100 && DisplayLevel == 2)continue;
+                    hImage[iPlane]->SetBinContent(iCol,Nrow-iRow,img_v.at(iPlane).pixel(iRow,iCol));
+
                 }
             }
             cROI->cd(iPlane+1);
@@ -113,8 +114,12 @@ int main( int nargs, char** argv ) {
                 ROIBox->SetFillStyle(0);
                 ROIBox->SetLineWidth(1);
                 ROIBox->SetLineColor(iPlane+2);
-                hImage[iPlane]->GetXaxis()->SetRangeUser(Xmin-4,Xmax+4);
-                hImage[iPlane]->GetYaxis()->SetRangeUser(Ymin-4,Ymax+4);
+                if(DisplayLevel != 0){
+                    hImage[iPlane]->GetXaxis()->SetRangeUser(Xmin-4,Xmax+4);
+                    hImage[iPlane]->GetYaxis()->SetRangeUser(Ymin-4,Ymax+4);
+                    if(DisplayLevel == 2)hImage[iPlane]->GetZaxis()->SetRangeUser(0,1000);
+                }
+                hImage[iPlane]->SetContour(10);
                 hImage[iPlane]->Draw("colz");
                 ROIBox->Draw();
             }
@@ -122,7 +127,9 @@ int main( int nargs, char** argv ) {
         }
         cROI->Modified();
         cROI->Update();
-        cROI->SaveAs(Form("ROI_%s.png",eventID.c_str()));
+        if(DisplayLevel == 0)cROI->SaveAs(Form("plots/FullImage_%s.png",eventID.c_str()));
+        if(DisplayLevel == 1)cROI->SaveAs(Form("plots/ROI_%s.png",eventID.c_str()));
+        if(DisplayLevel == 2)cROI->SaveAs(Form("plots/Track_%s.png",eventID.c_str()));
 
     }
 
@@ -130,7 +137,7 @@ int main( int nargs, char** argv ) {
     TCanvas *cADC = new TCanvas();
     cADC->SetLogy();
     hADC->Draw();
-    cADC->SaveAs("cADC.png");
+    cADC->SaveAs("plots/cADC.png");
     dataco.finalize();
 
     return 0;
